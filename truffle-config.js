@@ -1,6 +1,5 @@
 var HDWalletProvider = require('@truffle/hdwallet-provider')
 
-var mnemonic = "floor mixed narrow glide legend strong doctor bench strong kind true rebel";
 var publicTestnetNode = 'https://public-node.testnet.rsk.co/'
 
 const fs = require('fs');
