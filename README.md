@@ -19,6 +19,7 @@ Liquidation Engine: https://explorer.testnet.rsk.co/address/0x40e718099d0681478c
 [Address = 0x40E718099D0681478cf5CBD799918B18b6E2Aa5D]
 
 AccountingEngine: 0x3CdD2E93763A6920d4b515DF0BCe886b6bdC7660
+
   Dependencies-
   DebtAuctionHouse: '0xeD0Ea0f99A0603d23658de9823eb91ea1227d6C8';
 
@@ -28,7 +29,7 @@ We have made a few changes to the contracts as well as test scripts as needed fo
 
 The functionalities of these core contracts are briefly described below.
 
-The SAFEEngine is in charge with two main system functions:
+I) The SAFEEngine is in charge with two main system functions:
 1. SAFE Management
 Anyone can manage a SAFE via modifySAFECollateralization, which modifies the SAFE at address safe, using tokenCollateral from user collateralSource and modifying coinBalance for user debtDestination.  
 confiscateSAFECollateralAndDebtis usually called by LiquidationEngine and transfers debt from the SAFE to another address' debtBalance.  
@@ -37,13 +38,24 @@ debtBalance represents bad debt and can be canceled out with an equal quantity o
 The accumulatedRates helps convert normalized debt (generatedDebt) drawn against a collateralType to the present value of that debt (actual debt issued + interest). The rate is updated using updateAccumulatedRate (called by the TaxCollector). After every update, the newly accrued stability fees are added to the coinBalance of surplusDst.
 
 
-The LiquidationEngine handles collateral liquidation functions system:
+II) The LiquidationEngine handles collateral liquidation functions system:
 
 liquidateSAFE can be called at any time but will only succeed if the target SAFE is underwater. A SAFE is underwater when the result of its collateral (lockedCollateral) multiplied by the collateral's liquidation price (liquidationPrice) is smaller than its present value debt (generatedDebt times the collateral's accumulatedRates). 
 1. liquidationPrice is the oracle-reported price scaled by the collateral's liquidation ratio. There is a clear distinction between liquidation and safety ratios (even though the two can be equal in value):
 Safety ratios are the minimum collateralization ratios used when generating debt against a SAFE's collateral. They can be more conservative (higher) than liquidation ratios  
 2. Liquidation ratios are the minimum collateralization ratios under which SAFEs are liquidated  
 3. liquidateSAFE may terminate early if the owner of the SAFE that's being targeted protected their position with a saviour that manages to save it from liquidation.
+
+III) The Accounting Engine has the following functions wrt auctions of debts and surpluses (This encapsulates the functions of DebtAuctionHouse and SurplusAuctionHouse contracts as well)-
+1. Auctioning Debt
+When a SAFE is liquidated, the seized debt is put in a queue in the AccountingEngine. This occurs at the block timestamp of the liquidateSAFE action (debtQueue[timestamp]). It can be released with the help of popDebtFromQueue once AccountingEngine.popDebtDelay has expired. Once released, it can be settled using the surplus gathered from the SAFE's liquidation or, if there wasn't enough surplus gathered, the debt can be auctioned using the DebtAuctionHouse. NOTE: the AccountingEngine can start a new debt auction only if canPrintProtocolTokens returns true and if it also doesn't unexpectedly revert.
+The main risk is related to popDebtDelay < CollateralAuctionHouse.totalAuctionLength which would result in debt auctions starting before the associated collateral auctions could complete.
+2. Auctioning Surplus
+When the AccountingEngine has a surplus balance above the surplusBuffer (safeEngine.coinBalance[accountingEngine] > surplusBuffer), if the extra surplus on top of the buffer is not reserved to nullify the engine's bad debt (safeEngine.debtBalance[accountingEngine]) and if extraSurplusIsTransferred is 0, the extra surplus can be auctioned off using the Burning/RecyclingSurplusAuctionHouse. This process results in burning protocol tokens that are being offered in exchange for the auctioned surplus.
+3. Transferring Extra Surplus
+When the AccountingEngine has a surplus balance above the surplusBuffer (safeEngine.coinBalance[accountingEngine] > surplusBuffer), if the extra surplus on top of the buffer is not reserved to nullify the engine's bad debt (safeEngine.debtBalance[accountingEngine]) and if extraSurplusIsTransferred is 1, the extra surplus can be transferred to extraSurplusReceiver.
+4. Disabling the Accounting Engine
+When an authorized address calls AccountingEngine.disableContract the system will try to settle as much remaining safeEngine.debtBalance[accountingEngine] as possible.
 
 Also see for tests: https://github.com/Aranyani01/B-RAI.js
 
